@@ -15,27 +15,28 @@ export type KnownModel =
     | 'moondream:1.8b-v2-fp16'
     | 'moondream:1.8b-v2-moondream2-text-model-f16'
 
-export async function ollamaInference(args: {
-    model: KnownModel,
-    messages: { role: 'system' | 'user' | 'assistant', content: string, images?: Uint8Array[] }[],
-}) {
-    const response = await backoff<any>(async () => {
-
-        let converted: { role: string, content: string, images?: string[] }[] = [];
-        for (let message of args.messages) {
-            converted.push({
-                role: message.role,
-                content: trimIdent(message.content),
-                images: message.images ? message.images.map((image) => toBase64(image)) : undefined,
+    export async function ollamaInference(args: {
+        model: KnownModel,
+        messages: { role: 'system' | 'user' | 'assistant', content: string, images?: Uint8Array[] }[],
+    }) {
+        const response = await backoff<any>(async () => {
+    
+            let converted: { role: string, content: string, images?: string[] }[] = [];
+            for (let message of args.messages) {
+                converted.push({
+                    role: message.role,
+                    content: trimIdent(message.content),
+                    images: message.images ? message.images.map((image) => toBase64(image)) : undefined,
+                });
+            }
+    
+            let resp = await axios.post(`api/generate`, {
+                model: args.model,
+                messages: converted,
             });
-        }
-
-        let resp = await axios.post(keys.ollama, {
-            stream: false,
-            model: args.model,
-            messages: converted,
+    
+            return resp.data;
         });
-        return resp.data;
-    });
-    return trimIdent((response.message.content as string));
-}
+        return trimIdent((response.message.content as string));
+    }
+    

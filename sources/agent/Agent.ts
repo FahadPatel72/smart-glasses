@@ -59,6 +59,7 @@ export class Agent {
                 combined += p.description;
                 i++;
             }
+            console.log('last 3 photos', this.#photos)
             let answer = await llamaFind(question, combined);
             alert(answer)
             this.#state.answer = answer;
