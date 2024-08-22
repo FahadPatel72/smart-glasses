@@ -73,6 +73,9 @@ function usePhotos(device: BluetoothRemoteGATTServer) {
     return [subscribed, photos] as const;
 }
 
+
+
+
 export const DeviceView = React.memo((props: { device: BluetoothRemoteGATTServer }) => {
     const [subscribed, photos] = usePhotos(props.device);
     const agent = React.useMemo(() => new Agent(), []);

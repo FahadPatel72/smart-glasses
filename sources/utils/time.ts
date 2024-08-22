@@ -40,7 +40,7 @@ export function createBackoff(
 }
 
 export const backoff = createBackoff({
-    onError(e, failuresCount) {
-        console.warn(e);
+    onError(error, failuresCount) {
+        console.warn(error);
     },
 });

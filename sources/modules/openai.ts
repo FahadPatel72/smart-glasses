@@ -2,12 +2,12 @@ import axios from "axios";
 import * as FileSystem from 'expo-file-system';
 import { keys } from "../keys";
 
-const BASE_URL= 'https://0f36-2402-8100-24c0-cb19-e95f-2aab-70a4-9bbe.ngrok-free.app';
+const BASE_URL= 'http://127.0.0.1:5000';
 
 export async function transcribeAudio(audioPath: string) {
     try {
         const audioBase64 = await FileSystem.readAsStringAsync(audioPath, { encoding: FileSystem.EncodingType.Base64 });
-        const response = await axios.post(`${BASE_URL}/audio/transcriptions`, {
+        const response = await axios.post(`http://127.0.0.1:5000/audio/transcriptions`, {
             audio: audioBase64,
         });
         return response.data;
@@ -17,26 +17,38 @@ export async function transcribeAudio(audioPath: string) {
     }
 }
 
-let audioContext: AudioContext;
+// let audioContext: AudioContext;
 
 export async function startAudio() {
     audioContext = new AudioContext();
 }
 
-export async function textToSpeech(text: string) {
+
+let audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+
+export async function textToSpeech(text: String) {
     try {
-        const response = await axios.post(`${BASE_URL}/audio/speech`, {
-            input: text
+        // Request to convert text to speech
+        const response = await axios.post("http://127.0.0.1:5000/audio/speech", {
+            text: text
         }, {
             headers: {
-                'Authorization': `Bearer ${keys.openai}`,  // Replace YOUR_API_KEY with your actual OpenAI API key
-                'Content-Type': 'application/json'
+                'Authorization': `Bearer ${keys.openai}`,  // Replace with your actual OpenAI API key
+                'Content-Type': 'application/json'  // Set to application/json for text payload
             },
-            responseType: 'arraybuffer'  // This will handle the binary data correctly
+            responseType: 'arraybuffer'  // Handle binary data correctly
         });
 
+        // Check the Content-Type header to ensure it is an audio format
+        const contentType = response.headers['content-type']; 
+        if (!contentType || !contentType.startsWith('audio/')) {
+            throw new Error(`Unexpected Content-Type: ${contentType}`);
+        }
+
         // Decode the audio data asynchronously
-        const audioBuffer = await audioContext.decodeAudioData(response.data);
+        const audioBuffer = await new Promise<AudioBuffer>((resolve, reject) => {
+            audioContext.decodeAudioData(response.data, resolve, reject);
+        });
 
         // Create an audio source
         const source = audioContext.createBufferSource();
@@ -65,7 +77,7 @@ async function imageToBase64(path: string) {
 export async function describeImage(imagePath: string) {
     const imageBase64 = await imageToBase64(imagePath);
     try {
-        const response = await axios.post(`${BASE_URL}/images/descriptions`, {
+        const response = await axios.post(`http://127.0.0.1:5000/images/descriptions`, {
             image: imageBase64,
         });
         return response.data;
@@ -77,7 +89,7 @@ export async function describeImage(imagePath: string) {
 
 export async function gptRequest(systemPrompt: string, userPrompt: string) {
     try {
-        const response = await axios.post(`${BASE_URL}/chat/completions`, {
+        const response = await axios.post(`http://127.0.0.1:5000/chat/completions`, {
             model: "gpt-3.5-turbo",
             messages: [
                 { role: "system", content: systemPrompt },
@@ -92,7 +104,7 @@ export async function gptRequest(systemPrompt: string, userPrompt: string) {
 }
 
 // Example usage
-textToSpeech("Hello I am an agent");
+textToSpeech("Hello I am your assistant, happy to help you");
 gptRequest(
     `
         You are a smart AI that needs to read through the description of images and answer users' questions. 
