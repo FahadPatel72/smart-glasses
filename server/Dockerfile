@@ -1,24 +1,29 @@
+
 # Use Python 3.9 base image
 FROM python:3.9
 
+# Install system dependencies
+RUN apt-get update && \
+    apt-get install -y curl ffmpeg
+
+# Install Ollama
+RUN curl -fsSL https://ollama.com/install.sh | sh
+
+# Set up working directory
 WORKDIR /server
 
 # Copy application files
 COPY . .
 
-# Install Flask requirements
+# Install Python requirements
 RUN pip install -r requirements.txt
 
-# Install curl
-RUN apt-get update && apt-get install -y curl
+# Expose the ports for both services
+EXPOSE 5000 11432
 
-# Install Ollama
-RUN curl -fsSL https://ollama.com/install.sh | sh
+# Copy the startup script into the container
+COPY start_services.sh /start_services.sh
+RUN chmod +x /start_services.sh
 
-RUN ollama serve &
-
-EXPOSE 5000
-
-# Set the default command to run the application
-CMD [ "python", "main.py" ] 
-
+# Set the default command to run the startup script
+CMD ["/start_services.sh"]
