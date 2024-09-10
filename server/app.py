@@ -5,13 +5,20 @@ import requests
 import io
 import wave
 import os
+import google.generativeai as genai
 from pydub import AudioSegment
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
 
-DEEPGRAM_API_KEY = "8d75fcc2828c159f8554d736880d0fe745153b49"
-LLM_API_KEY = "43b8a91a67412e1dd709373052ce3ce295531822bccddd77686cf7758b63cbd9"
+DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+MODEL_NAME = os.environ.get("MODEL_NAME")
+
+genai.configure(api_key=GEMINI_API_KEY)
 
 @app.route('/', methods=['GET'])
 def index():
@@ -94,33 +101,13 @@ def text_to_speech():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/chat/completions', methods=['POST', 'OPTIONS'])
-def chat_completions():
-    if request.method == 'OPTIONS':
-        response = make_response()
-        response.headers.add("Access-Control-Allow-Origin", "*")
-        response.headers.add("Access-Control-Allow-Headers", "*")
-        response.headers.add("Access-Control-Allow-Methods", "*")
-        return response
-    try:
-        url = "https://llm.mdb.ai/chat/completions"
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {LLM_API_KEY}"
-        }
-        data = request.json
+def upload_to_gemini(path, mime_type=None):
+    """Uploads the given file to Gemini."""
+    file = genai.upload_file(path, mime_type=mime_type)
+    print(f"Uploaded file '{file.display_name}' as: {file.uri}")
+    return file
 
-        response = requests.post(url, headers=headers, json=data)
-
-        if response.status_code == 200:
-            return jsonify(response.json()), 200
-        else:
-            return jsonify({"error": f"Error from LLM API: {response.status_code} - {response.text}"}), response.status_code
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/image/description', methods=['POST', 'OPTIONS'])
+@app.route('/api/generate', methods=['POST', 'OPTIONS'])
 def image_description():
     if request.method == 'OPTIONS':
         response = make_response()
@@ -128,46 +115,62 @@ def image_description():
         response.headers.add("Access-Control-Allow-Headers", "*")
         response.headers.add("Access-Control-Allow-Methods", "*")
         return response
-    try:
-        base64_image = request.json.get('image')
 
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {LLM_API_KEY}"
+    try:
+        # Set generation configuration
+        generation_config = {
+            "temperature": 1,
+            "top_p": 0.95,
+            "top_k": 64,
+            "max_output_tokens": 8192,
+            "response_mime_type": "text/plain",
         }
 
-        payload = {
-            "model": "gemini-1.5-pro",
-            "messages": [
+        # Initialize the generative model
+        model = genai.GenerativeModel(
+            model_name=MODEL_NAME,
+            generation_config=generation_config,
+        )
+        
+        # Extract base64 image from the request
+        image_data = request.data
+        
+        # if not base64_image:
+        #     return jsonify({"error": "No image provided"}), 400
+
+        # Decode base64 image and save it temporarily
+        # image_data = base64.b64decode(base64_image)
+        image_path = "uploaded_image.png"
+        with open(image_path, "wb") as f:
+            f.write(image_data)
+
+        # Upload image to Gemini
+        uploaded_file = upload_to_gemini(image_path, mime_type="image/png")
+
+        # Start a chat session with the image to describe it
+        chat_session = model.start_chat(
+            history=[
                 {
                     "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "What’s in this image?"
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": base64_image
-                            }
-                        }
-                    ]
+                    "parts": [
+                        uploaded_file,
+                        "describe image",
+                    ],
                 }
-            ],
-            "max_tokens": 300
-        }
+            ]
+        )
 
-        response = requests.post("https://llm.mdb.ai/chat/completions", headers=headers, json=payload)
-
-        if response.status_code == 200:
-            return jsonify(response.json()), 200
+        # Generate the description by sending the message
+        response = chat_session.send_message("What's in this image?")
+        
+        # Return the description
+        if response:
+            return jsonify({"description": response.text}), 200
         else:
-            return jsonify({"error": f"Error from LLM API: {response.status_code} - {response.text}"}), response.status_code
+            return jsonify({"error": "Failed to generate description"}), 500
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    
 
 @app.route('/generate', methods=['POST', 'OPTIONS'])
 def ollama_generate():
@@ -204,7 +207,6 @@ def ollama_generate():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
     
 def trim_ident(content):
     # Add your trimIdent logic here
@@ -213,12 +215,5 @@ def trim_ident(content):
 def to_base64(image):
     return base64.b64encode(image).decode('utf-8')
   
-
-# if __name__ == '__main__':
-#     app.run(debug=True)
-
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
-
-
-
